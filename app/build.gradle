@@ -1,0 +1,67 @@
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+    id 'androidx.navigation.safeargs.kotlin'
+    id 'kotlin-parcelize'
+    id 'dagger.hilt.android.plugin'
+    id 'kotlin-kapt'
+}
+
+android {
+    compileSdk 32
+
+    defaultConfig {
+        applicationId "edu.shayo.templateone"
+        minSdk 21
+        targetSdk 32
+        versionCode 1
+        versionName "1.0"
+
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+    kotlinOptions {
+        jvmTarget = '1.8'
+    }
+    buildFeatures {
+        viewBinding true
+    }
+}
+
+dependencies {
+    def lifecycle_extension_version = '2.5.0'
+
+    // Coroutines:
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.6.3'
+    // To use trySend() instead of offer() in callbackFlow (see https://github.com/Kotlin/kotlinx.coroutines/issues/974)
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.3'
+
+    // Hilt:
+    implementation "com.google.dagger:hilt-android:$hilt_version"
+    kapt "com.google.dagger:hilt-compiler:$hilt_version"
+
+    // Lifecycle:
+    implementation "androidx.lifecycle:lifecycle-runtime-ktx:$lifecycle_extension_version"
+    implementation "androidx.lifecycle:lifecycle-viewmodel-ktx:$lifecycle_extension_version"
+    implementation "androidx.lifecycle:lifecycle-service:$lifecycle_extension_version"
+
+    implementation 'com.google.android.gms:play-services-location:20.0.0'
+    // Navigation:
+    implementation "androidx.navigation:navigation-fragment-ktx:$nav_version"
+    implementation "androidx.navigation:navigation-ui-ktx:$nav_version"
+
+    implementation 'androidx.core:core-ktx:1.8.0'
+    implementation 'androidx.appcompat:appcompat:1.4.2'
+    implementation 'com.google.android.material:material:1.6.1'
+    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+}
