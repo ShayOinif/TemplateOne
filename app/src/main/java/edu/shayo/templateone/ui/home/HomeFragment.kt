@@ -24,18 +24,6 @@ class HomeFragment : Fragment() {
     ): View {
         _binding = FragmentHomeBinding.inflate(inflater, container, false)
 
-        binding.homeFragmentStartButton.setOnClickListener {
-            //homeViewModel.navigate()
-
-            (requireActivity() as ServiceController).startService()
-        }
-
-        binding.homeFragmentStopButton.setOnClickListener {
-            //homeViewModel.navigate()
-
-            (requireActivity() as ServiceController).stopService()
-        }
-
         return binding.root
     }
 
