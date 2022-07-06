@@ -17,10 +17,10 @@ class PermissionRequesterImpl @Inject constructor() : PermissionRequester {
     private var rationale: String? = null
     private var callback: (Boolean) -> Unit = {}
     private var detailedCallback: (Map<Permission, Boolean>) -> Unit = {}
-    private lateinit var currentFragment: WeakReference<FragmentActivity>
+    private  var currentFragment: WeakReference<FragmentActivity>? = null
 
     private val permissionCheck =
-        currentFragment.get()
+        currentFragment?.get()
             ?.registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grantResults ->
                 sendResultAndCleanUp(grantResults)
             }
@@ -50,7 +50,7 @@ class PermissionRequesterImpl @Inject constructor() : PermissionRequester {
     }
 
     private fun handlePermissionRequest() {
-        currentFragment.get()?.let { fragment ->
+        currentFragment?.get()?.let { fragment ->
             when {
                 areAllPermissionsGranted(fragment) -> sendPositiveResult()
                 shouldShowPermissionRationale(fragment) -> displayRationale(fragment)
