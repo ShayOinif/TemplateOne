@@ -3,6 +3,7 @@ package edu.shayo.templateone.permissions
 import android.Manifest.permission.ACCESS_COARSE_LOCATION
 import android.Manifest.permission.ACCESS_FINE_LOCATION
 import android.content.pm.PackageManager
+import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.core.content.ContextCompat
@@ -19,14 +20,15 @@ class PermissionRequesterImpl @Inject constructor() : PermissionRequester {
     private var detailedCallback: (Map<Permission, Boolean>) -> Unit = {}
     private  var currentFragment: WeakReference<FragmentActivity>? = null
 
-    private val permissionCheck =
-        currentFragment?.get()
-            ?.registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grantResults ->
-                sendResultAndCleanUp(grantResults)
-            }
+    private var permissionCheck: ActivityResultLauncher<Array<String>>? = null
 
     override fun from(fragment: FragmentActivity) {
         currentFragment = WeakReference(fragment)
+
+        permissionCheck = currentFragment?.get()
+            ?.registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grantResults ->
+                sendResultAndCleanUp(grantResults)
+            }
     }
 
     override fun rationale(description: String): PermissionRequester {
@@ -51,9 +53,14 @@ class PermissionRequesterImpl @Inject constructor() : PermissionRequester {
 
     private fun handlePermissionRequest() {
         currentFragment?.get()?.let { fragment ->
+
             when {
-                areAllPermissionsGranted(fragment) -> sendPositiveResult()
-                shouldShowPermissionRationale(fragment) -> displayRationale(fragment)
+                areAllPermissionsGranted(fragment) -> {
+                    sendPositiveResult()
+                }
+                shouldShowPermissionRationale(fragment) -> {
+                    displayRationale(fragment)
+                }
                 else -> requestPermissions()
             }
         }
@@ -106,17 +113,18 @@ class PermissionRequesterImpl @Inject constructor() : PermissionRequester {
     private fun Permission.requiresRationale(fragment: FragmentActivity) =
         permissions.any { fragment.shouldShowRequestPermissionRationale(it) }
 
-    private fun hasPermission(fragment: FragmentActivity, permission: String) =
-        ContextCompat.checkSelfPermission(
+    private fun hasPermission(fragment: FragmentActivity, permission: String): Boolean {
+
+        return ContextCompat.checkSelfPermission(
             fragment,
             permission
         ) == PackageManager.PERMISSION_GRANTED
+    }
 }
 
 sealed class Permission(vararg val permissions: String) {
     // Grouped permissions
     object Location : Permission(ACCESS_FINE_LOCATION, ACCESS_COARSE_LOCATION)
-
 
     companion object {
         fun from(permission: String) = when (permission) {

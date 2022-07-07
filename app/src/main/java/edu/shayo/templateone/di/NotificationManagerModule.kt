@@ -10,7 +10,6 @@ import edu.shayo.templateone.notifications.NotificationManagerImpl
 @InstallIn(SingletonComponent::class)
 @Module
 abstract class NotificationManagerModule {
-
     @Binds
     abstract fun bindNotificationManager(impl: NotificationManagerImpl): NotificationManager
 }

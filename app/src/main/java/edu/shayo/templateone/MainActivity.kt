@@ -1,7 +1,6 @@
 package edu.shayo.templateone
 
 import android.content.*
-import android.graphics.Color
 import android.os.Bundle
 import android.os.IBinder
 import android.widget.Button
@@ -70,7 +69,8 @@ class MainActivity : AppCompatActivity(), SharedPreferences.OnSharedPreferenceCh
 
         foregroundOnlyLocationButton.setOnClickListener {
             val enabled = sharedPreferences.getBoolean(
-                SharedPreferenceUtil.KEY_FOREGROUND_ENABLED, false)
+                SharedPreferenceUtil.KEY_FOREGROUND_ENABLED, false
+            )
 
             if (enabled) {
                 foregroundOnlyLocationService?.unsubscribeToLocationUpdates()
@@ -90,20 +90,19 @@ class MainActivity : AppCompatActivity(), SharedPreferences.OnSharedPreferenceCh
                                     }
                                 }
                             }
-
                         } else {
-                            error("We couldn't access location :(")
+                            //error("We couldn't access location :(")
                         }
                     }
             }
         }
     }
 
-    private fun error(message: String) {
+    /*private fun error(message: String) {
         Snackbar.make(binding.root, message, Snackbar.LENGTH_SHORT)
             .withColor(Color.parseColor("#B00020"))
             .show()
-    }
+    }*/
 
     private fun Snackbar.withColor(@ColorInt colorInt: Int): Snackbar {
         this.view.setBackgroundColor(colorInt)

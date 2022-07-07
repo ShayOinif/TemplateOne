@@ -45,7 +45,6 @@ class NotificationManagerImpl @Inject constructor(
             setDefaults(NotificationCompat.DEFAULT_ALL)
             setOngoing(true)
             setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-
             actions.forEach {
                 addAction(it)
             }

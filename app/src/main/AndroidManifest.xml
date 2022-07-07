@@ -24,7 +24,7 @@
         </activity>
 
         <service
-            android:name="edu.shayo.templateone.service.RandomService"
+            android:name="edu.shayo.templateone.service.ForegroundOnlyLocationService"
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="location"/>
