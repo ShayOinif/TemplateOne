@@ -8,5 +8,15 @@
         android:id="@+id/homeFragment"
         android:name="edu.shayo.templateone.ui.home.HomeFragment"
         android:label="HomeFragment" >
+        <action
+            android:id="@+id/action_homeFragment_self"
+            app:destination="@id/homeFragment" />
+        <argument
+            android:name="first"
+            app:argType="integer" />
+
+        <argument
+            android:name="second"
+            app:argType="edu.shayo.templateone.data.MyModel" />
     </fragment>
 </navigation>

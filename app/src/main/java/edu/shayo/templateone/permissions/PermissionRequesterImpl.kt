@@ -1,6 +1,6 @@
 package edu.shayo.templateone.permissions
 
-import android.Manifest.permission.ACCESS_COARSE_LOCATION
+import android.Manifest.permission.ACCESS_BACKGROUND_LOCATION
 import android.Manifest.permission.ACCESS_FINE_LOCATION
 import android.content.pm.PackageManager
 import androidx.activity.result.ActivityResultLauncher
@@ -19,10 +19,9 @@ class PermissionRequesterImpl @Inject constructor() : PermissionRequester {
     private var callback: (Boolean) -> Unit = {}
     private var detailedCallback: (Map<Permission, Boolean>) -> Unit = {}
     private  var currentFragment: WeakReference<FragmentActivity>? = null
-
     private var permissionCheck: ActivityResultLauncher<Array<String>>? = null
 
-    override fun from(fragment: FragmentActivity) {
+    override fun from(fragment: FragmentActivity): PermissionRequester {
         currentFragment = WeakReference(fragment)
 
         permissionCheck = currentFragment?.get()
@@ -124,11 +123,11 @@ class PermissionRequesterImpl @Inject constructor() : PermissionRequester {
 
 sealed class Permission(vararg val permissions: String) {
     // Grouped permissions
-    object Location : Permission(ACCESS_FINE_LOCATION, ACCESS_COARSE_LOCATION)
+    object Location : Permission(ACCESS_FINE_LOCATION, ACCESS_BACKGROUND_LOCATION)
 
     companion object {
         fun from(permission: String) = when (permission) {
-            ACCESS_FINE_LOCATION, ACCESS_COARSE_LOCATION -> Location
+            ACCESS_FINE_LOCATION, ACCESS_BACKGROUND_LOCATION -> Location
             else -> throw IllegalArgumentException("Unknown permission: $permission")
         }
     }

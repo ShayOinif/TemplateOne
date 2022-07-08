@@ -6,9 +6,6 @@ import android.os.IBinder
 import android.widget.Button
 import androidx.annotation.ColorInt
 import androidx.appcompat.app.AppCompatActivity
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.repeatOnLifecycle
 import com.google.android.material.snackbar.Snackbar
 import dagger.hilt.android.AndroidEntryPoint
 import edu.shayo.templateone.databinding.ActivityMainBinding
@@ -17,8 +14,6 @@ import edu.shayo.templateone.permissions.PermissionRequester
 import edu.shayo.templateone.service.ForegroundOnlyLocationService
 import edu.shayo.templateone.utils.SharedPreferenceUtil
 import edu.shayo.templateone.utils.SharedPreferenceUtil.PREFERENCE_FILE_KEY
-import edu.shayo.templateone.utils.toText
-import kotlinx.coroutines.flow.collectLatest
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -83,13 +78,13 @@ class MainActivity : AppCompatActivity(), SharedPreferences.OnSharedPreferenceCh
                         if (granted) {
                             foregroundOnlyLocationService?.subscribeToLocationUpdates()
 
-                            lifecycleScope.launchWhenResumed {
+                            /*lifecycleScope.launchWhenResumed {
                                 repeatOnLifecycle(Lifecycle.State.RESUMED) {
                                     foregroundOnlyLocationService?.locationFlow?.collectLatest {
                                         logResultsToScreen(it.toText())
                                     }
                                 }
-                            }
+                            }*/
                         } else {
                             //error("We couldn't access location :(")
                         }
