@@ -4,6 +4,8 @@ import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
+import edu.shayo.templateone.navigator.HomeFragmentNavigator
+import edu.shayo.templateone.navigator.HomeFragmentNavigatorImpl
 import edu.shayo.templateone.navigator.Navigator
 import edu.shayo.templateone.navigator.NavigatorImpl
 
@@ -13,4 +15,7 @@ abstract class NavigatorModule {
 
     @Binds
     abstract fun bindNavigator(impl: NavigatorImpl): Navigator
+
+    @Binds
+    abstract fun bindHomeFragmentNavigator(impl: HomeFragmentNavigatorImpl): HomeFragmentNavigator
 }

@@ -7,12 +7,13 @@ import android.content.res.Configuration
 import android.location.Location
 import android.os.Binder
 import android.os.IBinder
-import android.os.Looper
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.lifecycleScope
-import com.google.android.gms.location.*
+import com.google.android.gms.location.FusedLocationProviderClient
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
@@ -21,17 +22,31 @@ import edu.shayo.templateone.MainActivity
 import edu.shayo.templateone.R
 import edu.shayo.templateone.notifications.NotificationManager
 import edu.shayo.templateone.utils.SharedPreferenceUtil
+import edu.shayo.templateone.utils.locationFlow
 import edu.shayo.templateone.utils.toText
-import kotlinx.coroutines.*
-import kotlinx.coroutines.channels.awaitClose
-import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.launch
 import java.util.*
 
 private const val PACKAGE_NAME = "edu.shayo.templateone"
+
 private const val EXTRA_CANCEL_LOCATION_TRACKING_FROM_NOTIFICATION =
     "$PACKAGE_NAME.extra.CANCEL_LOCATION_TRACKING_FROM_NOTIFICATION"
 
 class ForegroundOnlyLocationService : LifecycleService() {
+
+    @EntryPoint
+    @InstallIn(SingletonComponent::class)
+    interface ForegroundOnlyLocationServiceEntryPoint {
+        fun notificationManager(): NotificationManager
+
+        fun locationServiceCoroutineScope(): LocationServiceCoroutineScope
+    }
+
+    private var canRunInBackground = false
 
     private var configurationChange = false
 
@@ -45,17 +60,11 @@ class ForegroundOnlyLocationService : LifecycleService() {
 
     private val notificationId = (10000000..12345678).random()
 
-    private var locationFlow: SharedFlow<Location?>? = null
-
-    @EntryPoint
-    @InstallIn(SingletonComponent::class)
-    interface ForegroundOnlyLocationServiceEntryPoint {
-        fun notificationManager(): NotificationManager
-    }
-
     private lateinit var notificationManager: NotificationManager
 
-    private var currentScope: CoroutineScope? = null
+    private lateinit var locationServiceCoroutineScope: LocationServiceCoroutineScope
+
+    private var locationJob: Job? = null
 
     override fun onCreate() {
 
@@ -65,42 +74,11 @@ class ForegroundOnlyLocationService : LifecycleService() {
             applicationContext,
             ForegroundOnlyLocationServiceEntryPoint::class.java
         ).notificationManager()
-    }
 
-    // Implementation of a cold flow backed by a Channel that sends Location updates
-    @OptIn(FlowPreview::class)
-    private fun FusedLocationProviderClient.locationFlow() = callbackFlow {
-        val locationCallback = object : LocationCallback() {
-            override fun onLocationResult(result: LocationResult) {
-                try {
-                    Log.d("Shay", "In callback")
-                    trySend(result.lastLocation)
-                } catch (e: Exception) {
-                    Log.d("Shay", e.message.toString())
-                }
-            }
-        }
-
-        val locationRequest = LocationRequest.create().apply {
-            interval = 1_000
-            fastestInterval = 1_000
-            maxWaitTime = 1_000
-            priority = Priority.PRIORITY_HIGH_ACCURACY
-        }
-
-        requestLocationUpdates(locationRequest, locationCallback, Looper.getMainLooper())
-            .addOnFailureListener { e ->
-                close(e) // in case of exception, close the Flow
-            }.addOnCompleteListener { task ->
-                if (task.isSuccessful) {
-                    locationFlow = null
-                }
-            }
-        // clean up when Flow collection ends
-
-        awaitClose {
-            removeLocationUpdates(locationCallback)
-        }
+        locationServiceCoroutineScope = EntryPointAccessors.fromApplication(
+            applicationContext,
+            ForegroundOnlyLocationServiceEntryPoint::class.java
+        ).locationServiceCoroutineScope()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -131,19 +109,24 @@ class ForegroundOnlyLocationService : LifecycleService() {
     }
 
     override fun onUnbind(intent: Intent): Boolean {
-        if (!configurationChange && SharedPreferenceUtil.getLocationTrackingPref(this)) {
-
+        if (!configurationChange &&
+            SharedPreferenceUtil.getLocationTrackingPref(this) &&
+            canRunInBackground
+        ) {
             val notification =
                 notificationManager.generateNotification(
-                   /* locationFlow?.
-                    .replayCache?.last().toText(),*/
-                    "test",
+                    privateLocationFlow.replayCache.last().toText(),
                     getString(R.string.app_name),
                     getListOfAction(),
                     notificationChannelId,
                 )
 
-            startForeground(notificationId, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MANIFEST)
+            startForeground(
+                notificationId,
+                notification,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_MANIFEST
+            )
+
             serviceRunningInForeground = true
         }
 
@@ -155,26 +138,24 @@ class ForegroundOnlyLocationService : LifecycleService() {
         configurationChange = true
     }
 
-    private fun subscribeToLocationUpdates() {
+    private fun subscribeToLocationUpdates(includingBackground: Boolean) {
+
+        canRunInBackground = includingBackground
 
         SharedPreferenceUtil.saveLocationTrackingPref(this, true)
 
         startService(Intent(applicationContext, ForegroundOnlyLocationService::class.java))
 
-        val test = CoroutineScope(Dispatchers.IO + SupervisorJob())
-
-        locationFlow = fusedLocationProviderClient.locationFlow().shareIn(test, SharingStarted.Eagerly, 1)
-
         try {
+            if (locationJob == null) {
+                locationJob = lifecycleScope.launch(Dispatchers.IO) {
 
-            lifecycleScope.launch(Dispatchers.IO) {
-                launch {
-                        //.shareIn(currentScope!!, SharingStarted.Eagerly, 1)
-                        //locationFlow?.collect { lastLocation ->
-
-                    locationFlow?.collectLatest {lastLocation ->
-                        Log.d("Shay", lastLocation.toText())
-
+                    fusedLocationProviderClient.locationFlow(
+                        5_000,
+                        10_000,
+                        20_000,
+                        Priority.PRIORITY_HIGH_ACCURACY
+                    ).collect { lastLocation ->
                         if (serviceRunningInForeground) {
                             notificationManager.notify(
                                 notificationId,
@@ -186,22 +167,13 @@ class ForegroundOnlyLocationService : LifecycleService() {
                                 )
                             )
                         }
-                    }
-                }
 
-                launch {
-                    while (true) {
-                        Log.d("Shay", lifecycle.currentState.name)
-                        locationFlow?.let {
-                            Log.d("Shay", "Location flow not null")
+                        locationServiceCoroutineScope.launch {
+                            privateLocationFlow.emit(lastLocation)
                         }
-
-                        delay(3000)
                     }
                 }
             }
-            // }
-
         } catch (unlikely: SecurityException) {
             Log.d("Shay", unlikely.message.toString())
             SharedPreferenceUtil.saveLocationTrackingPref(this, false)
@@ -211,21 +183,22 @@ class ForegroundOnlyLocationService : LifecycleService() {
     private fun unsubscribeToLocationUpdates() {
         try {
             SharedPreferenceUtil.saveLocationTrackingPref(this, false)
+            locationJob?.cancel()
+            locationJob = null
             stopSelf()
 
         } catch (unlikely: SecurityException) {
+            Log.d("Shay", unlikely.message.toString())
             SharedPreferenceUtil.saveLocationTrackingPref(this, true)
         }
     }
 
     inner class LocalBinder : Binder() {
-        fun subscribeToLocationUpdates() =
-            this@ForegroundOnlyLocationService.subscribeToLocationUpdates()
+        fun subscribeToLocationUpdates(includingBackground: Boolean = false) =
+            this@ForegroundOnlyLocationService.subscribeToLocationUpdates(includingBackground)
 
         fun unsubscribeToLocationUpdates() =
             this@ForegroundOnlyLocationService.unsubscribeToLocationUpdates()
-
-        //var locationFlow: SharedFlow<Location?>? = this@ForegroundOnlyLocationService.locationFlow
     }
 
     private fun getListOfAction(): List<NotificationCompat.Action> {
@@ -264,10 +237,9 @@ class ForegroundOnlyLocationService : LifecycleService() {
         )
     }
 
-    override fun onDestroy() {
-        super.onDestroy()
-
-        Log.d("Shay", "Destroyed")
+    companion object {
+        private var privateLocationFlow = MutableSharedFlow<Location?>(1)
+        val locationFlow: SharedFlow<Location?>
+            get() = privateLocationFlow
     }
 }
-

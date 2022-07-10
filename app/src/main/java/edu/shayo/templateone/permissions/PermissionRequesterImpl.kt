@@ -1,134 +1,154 @@
 package edu.shayo.templateone.permissions
 
-import android.Manifest.permission.ACCESS_BACKGROUND_LOCATION
-import android.Manifest.permission.ACCESS_FINE_LOCATION
 import android.content.pm.PackageManager
+import android.util.Log
+import androidx.activity.ComponentActivity
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.core.content.ContextCompat
-import androidx.fragment.app.FragmentActivity
 import edu.shayo.templateone.R
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.take
+import kotlinx.coroutines.withContext
 import java.lang.ref.WeakReference
 import javax.inject.Inject
 
 class PermissionRequesterImpl @Inject constructor() : PermissionRequester {
 
-    private val requiredPermissions = mutableListOf<Permission>()
-    private var rationale: String? = null
-    private var callback: (Boolean) -> Unit = {}
-    private var detailedCallback: (Map<Permission, Boolean>) -> Unit = {}
-    private  var currentFragment: WeakReference<FragmentActivity>? = null
-    private var permissionCheck: ActivityResultLauncher<Array<String>>? = null
+    private var requiredPermissions: MutableMap<Permission, PermissionState>? = null
+    private var callback: WeakReference<(Map<Permission, Boolean>) -> Unit>? = null
+    private var currentComponentActivity: WeakReference<ComponentActivity>? = null
+    private var permissionRequestLauncher: ActivityResultLauncher<Array<String>>? = null
 
-    override fun from(fragment: FragmentActivity): PermissionRequester {
-        currentFragment = WeakReference(fragment)
+    override fun from(componentActivity: ComponentActivity): PermissionRequester {
+        currentComponentActivity = WeakReference(componentActivity)
 
-        permissionCheck = currentFragment?.get()
+        permissionRequestLauncher = currentComponentActivity?.get()
             ?.registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grantResults ->
-                sendResultAndCleanUp(grantResults)
+
+                grantResults.forEach { (permissionName, isGranted) ->
+
+                    if (isGranted) {
+                        Permission.systemToPermission(permissionName)?.let {
+                            requiredPermissions?.put(it, PermissionState.GRANTED)
+                        }
+                    }
+                }
+
+                sendResultAndCleanUp()
             }
-    }
 
-    override fun rationale(description: String): PermissionRequester {
-        rationale = description
         return this
     }
 
-    override fun request(vararg permission: Permission): PermissionRequester {
-        requiredPermissions.addAll(permission)
-        return this
-    }
+    override fun withPermissions(vararg permissions: Permission) =
 
-    override fun checkPermission(callback: (Boolean) -> Unit) {
-        this.callback = callback
+        requiredPermissions?.let {
+            null
+        } ?: run {
+            requiredPermissions = mutableMapOf()
+
+            permissions.forEach {
+                requiredPermissions?.put(it, PermissionState.NOT_GRANTED)
+            }
+
+            return@run this
+        }
+
+    override suspend fun checkPermissions(callback: (Map<Permission, Boolean>) -> Unit) {
+        this.callback = WeakReference(callback)
+
         handlePermissionRequest()
     }
 
-    override fun checkDetailedPermission(callback: (Map<Permission, Boolean>) -> Unit) {
-        this.detailedCallback = callback
-        handlePermissionRequest()
-    }
+    private suspend fun handlePermissionRequest() {
+        currentComponentActivity?.get()?.let { componentActivity ->
 
-    private fun handlePermissionRequest() {
-        currentFragment?.get()?.let { fragment ->
+            requiredPermissions?.let { permissions ->
+                permissions.forEach { (permission, _) ->
+                    if (componentActivity.hasPermission(permission))
 
-            when {
-                areAllPermissionsGranted(fragment) -> {
-                    sendPositiveResult()
+                        permissions[permission] = PermissionState.GRANTED
                 }
-                shouldShowPermissionRationale(fragment) -> {
-                    displayRationale(fragment)
-                }
-                else -> requestPermissions()
+
+                permissions.filter { it.value == PermissionState.NOT_GRANTED }
+                    .forEach { (permission, _) ->
+                        if (componentActivity.shouldShowRequestPermissionRationale(permission.name)) {
+                            componentActivity.showRationale(permission)
+                            Log.d("Shay", "Done waiting")
+                        }
+                        else {
+                            permissions[permission] = PermissionState.SHOULD_ASK
+
+                            Log.d("Shay", "Done waiting")
+                        }
+                    }
+
+                permissionRequestLauncher?.launch(
+                    permissions.filter { it.value == PermissionState.SHOULD_ASK }
+                        .map { permissionEntry ->
+                            permissionEntry.key.name
+                        }.toTypedArray()
+                )
             }
         }
     }
 
-    private fun displayRationale(fragment: FragmentActivity) {
-        AlertDialog.Builder(fragment)
-            .setTitle(fragment.getString(R.string.dialog_permission_title))
-            .setMessage(rationale ?: fragment.getString(R.string.dialog_permission_default_message))
-            .setCancelable(false)
-            .setPositiveButton(fragment.getString(R.string.dialog_permission_button_positive)) { _, _ ->
-                requestPermissions()
-            }
-            .show()
-    }
+    private fun sendResultAndCleanUp() {
 
-    private fun sendPositiveResult() {
-        sendResultAndCleanUp(getPermissionList().associateWith { true })
-    }
+        val result = requiredPermissions?.mapValues { permissionEntry ->
+            permissionEntry.value == PermissionState.GRANTED
+        } ?: mapOf()
 
-    private fun sendResultAndCleanUp(grantResults: Map<String, Boolean>) {
-        callback(grantResults.all { it.value })
-        detailedCallback(grantResults.mapKeys { Permission.from(it.key) })
+        callback?.get()?.invoke(result)
+
         cleanUp()
     }
 
     private fun cleanUp() {
-        requiredPermissions.clear()
-        rationale = null
-        callback = {}
-        detailedCallback = {}
+        callback = null
+        requiredPermissions = null
     }
 
-    private fun requestPermissions() {
-        permissionCheck?.launch(getPermissionList())
-    }
+    private suspend fun ComponentActivity.showRationale(permission: Permission) {
 
-    private fun areAllPermissionsGranted(fragment: FragmentActivity) =
-        requiredPermissions.all { it.isGranted(fragment) }
+        val answer = MutableSharedFlow<PermissionState>(1)
+        val context = Job() + Dispatchers.IO
 
-    private fun shouldShowPermissionRationale(fragment: FragmentActivity) =
-        requiredPermissions.any { it.requiresRationale(fragment) }
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.dialog_permission_title))
+            .setMessage(getString(permission.permissionRationaleResId))
+            .setCancelable(false)
+            .setPositiveButton(getString(R.string.dialog_permission_button_positive)) { _, _ ->
+                    answer.tryEmit(PermissionState.SHOULD_ASK)
+            }
+            .setNegativeButton(getString(R.string.dialog_permission_button_negative)) { _, _ ->
+                answer.tryEmit(PermissionState.NOT_GRANTED)
+            }
+            .show()
 
-    private fun getPermissionList() =
-        requiredPermissions.flatMap { it.permissions.toList() }.toTypedArray()
-
-    private fun Permission.isGranted(fragment: FragmentActivity) =
-        permissions.all { hasPermission(fragment, it) }
-
-    private fun Permission.requiresRationale(fragment: FragmentActivity) =
-        permissions.any { fragment.shouldShowRequestPermissionRationale(it) }
-
-    private fun hasPermission(fragment: FragmentActivity, permission: String): Boolean {
-
-        return ContextCompat.checkSelfPermission(
-            fragment,
-            permission
-        ) == PackageManager.PERMISSION_GRANTED
+        withContext(context) {
+            answer.take(1).collectLatest {
+                requiredPermissions?.put(permission, it)
+            }
+        }
     }
 }
 
-sealed class Permission(vararg val permissions: String) {
-    // Grouped permissions
-    object Location : Permission(ACCESS_FINE_LOCATION, ACCESS_BACKGROUND_LOCATION)
+private fun ComponentActivity.hasPermission(permission: Permission): Boolean {
+    return ContextCompat.checkSelfPermission(
+        this,
+        permission.name
+    ) == PackageManager.PERMISSION_GRANTED
+}
 
-    companion object {
-        fun from(permission: String) = when (permission) {
-            ACCESS_FINE_LOCATION, ACCESS_BACKGROUND_LOCATION -> Location
-            else -> throw IllegalArgumentException("Unknown permission: $permission")
-        }
-    }
+
+private enum class PermissionState {
+    GRANTED,
+    NOT_GRANTED,
+    SHOULD_ASK
 }

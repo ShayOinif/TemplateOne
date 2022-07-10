@@ -3,8 +3,9 @@ package edu.shayo.templateone.navigator
 import androidx.navigation.NavDirections
 import edu.shayo.templateone.data.MyModel
 import edu.shayo.templateone.ui.home.HomeFragmentDirections
+import javax.inject.Inject
 
-class HomeFragmentNavigatorImpl : HomeFragmentNavigator {
+class HomeFragmentNavigatorImpl @Inject constructor() : HomeFragmentNavigator {
     override fun getDirections(
         state: FragmentState,
         params: List<Any>?

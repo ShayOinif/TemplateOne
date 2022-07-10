@@ -1,15 +1,11 @@
 package edu.shayo.templateone.permissions
 
-import androidx.fragment.app.FragmentActivity
+import androidx.activity.ComponentActivity
 
 interface PermissionRequester {
-    fun from(fragment: FragmentActivity)
+    fun from(componentActivity: ComponentActivity): PermissionRequester
 
-    fun rationale(description: String): PermissionRequester
+    fun withPermissions(vararg permissions: Permission): PermissionRequester?
 
-    fun request(vararg permission: Permission): PermissionRequester
-
-    fun checkPermission(callback: (Boolean) -> Unit)
-
-    fun checkDetailedPermission(callback: (Map<Permission,Boolean>) -> Unit)
+    suspend fun checkPermissions(callback: (Map<Permission,Boolean>) -> Unit)
 }
